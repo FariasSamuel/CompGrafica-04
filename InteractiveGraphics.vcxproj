@@ -137,8 +137,12 @@
     <ClCompile Include="Operations.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="hittable.h" />
+    <ClInclude Include="hittable_list.h" />
     <ClInclude Include="Operations.h" />
+    <ClInclude Include="plane.h" />
     <ClInclude Include="ray.h" />
+    <ClInclude Include="sphere.h" />
     <ClInclude Include="vec3.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -7,13 +7,26 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include "hittable.h"
-#include "hittable_list.h"
-#include "sphere.h"
-#include "plane.h"
 
-hittable_list mundo;
+struct esfera {
+    double rEsfera;
+    vec3 esfColor;
+    vec3 coord;
+};
 
+struct hitInfo {
+    vec3 normal;
+    vec3 hitPoint;
+    double t;
+    bool front_face;
+
+    void set_face_normal(const ray& r, const vec3& outward_normal) {
+        front_face = dot(r.direction(), outward_normal) < 0;
+        normal = front_face ? outward_normal : -outward_normal;
+    }
+};
+
+struct esfera esfera;
 
 vec3 lightPos(0, 5, 0);
 vec3 lightIntensity(0.7, 0.7, 0.7);
@@ -31,7 +44,7 @@ point3 lookfrom = point3(0, 0, dJanela);
 point3 lookat = point3(0, 0, 0);
 vec3 up(0, 1, 0);
 
-auto focal_length = (lookfrom-lookat).length();
+auto focal_length = (lookfrom - lookat).length();
 
 auto theta = glm::radians(vfov);
 auto h = tan(theta / 2);
@@ -40,7 +53,7 @@ auto viewport_height = 2.0 * h * focal_length;
 auto viewport_width = viewport_height * (static_cast<double>(wJanela) / hJanela);
 
 auto w = unit_vector(lookfrom - lookat);
-auto u = unit_vector(cross(up,w));
+auto u = unit_vector(cross(up, w));
 auto v = cross(w, u);
 
 auto camera_center = lookfrom;
@@ -49,7 +62,7 @@ auto camera_center = lookfrom;
 auto viewport_u = vec3(viewport_width, 0, 0) * u;
 auto viewport_v = vec3(0, viewport_height, 0) * v;
 
-auto Dx = viewport_u/wJanela;
+auto Dx = viewport_u / wJanela;
 auto Dy = viewport_v / hJanela;
 
 auto viewport_upper_left = camera_center - (focal_length * w) - viewport_u / 2 - viewport_v / 2;
@@ -58,14 +71,38 @@ auto pixel00_loc = viewport_upper_left + 0.5 * (Dx + Dy);
 
 GLubyte* PixelBuffer = new GLubyte[wJanela * hJanela * 3];
 
+bool sphere(const ray& r, double ray_tmin, double ray_tmax, hitInfo& rec) {
+    vec3 oc = r.origin() - esfera.coord;
+    double a = r.direction().length_squared();
+    double b = dot(r.direction(), oc);
+    double c = oc.length_squared() - esfera.rEsfera * esfera.rEsfera;
+
+    auto discriminant = b * b - a * c;
+    if (discriminant < 0) return false;
+    auto sqrtd = sqrt(discriminant);
+
+    auto root = (-b - sqrtd) / a;
+    if (root <= ray_tmin || ray_tmax <= root) {
+        root = (-b + sqrtd) / a;
+        if (root <= ray_tmin || ray_tmax <= root)
+            return false;
+    }
+
+    rec.t = root;
+    rec.hitPoint = r.at(rec.t);
+    //rec.normal = (rec.hitPoint - esfera.coord) ;
+    vec3 outward_normal = (rec.hitPoint - esfera.coord) / esfera.rEsfera;
+    rec.set_face_normal(r, outward_normal);
+    return true;
+}
 
 vec3 ray_color(const ray& r) {
     hitInfo rec;
-    if (mundo.hit(r,0, std::numeric_limits<double>::infinity(),rec)) {
+    if (sphere(r, 0, std::numeric_limits<double>::infinity(), rec)) {
 
         vec3 ambient = 0.1 * lightIntensity;
 
-        vec3 lightDir = unit_vector(lightPos - rec.hitPoint);  
+        vec3 lightDir = unit_vector(lightPos - rec.hitPoint);
         float diff = std::max(0.0, dot(rec.normal, lightDir));
         vec3 diffuse = diff * lightIntensity;
 
@@ -75,18 +112,10 @@ vec3 ray_color(const ray& r) {
         float spec = pow(std::max(dot(viewDir, reflectDir), 0.0), 128);
         vec3 specular = 1.0 * spec * lightIntensity;
 
-        vec3 color = rec.color * (specular + diffuse + ambient);
-        
+        vec3 color = esfera.esfColor * (specular + diffuse + ambient);
+
         color = vec3(std::min(color.x(), 255.0), std::min(color.y(), 255.0), std::min(color.z(), 255.0));
 
-        ray shadowRay(rec.hitPoint, lightDir);
-
-        hitInfo temp;
-
-        if (mundo.hit(shadowRay, 0.1, std::numeric_limits<double>::infinity(), temp) && diff > 0) {
-            return rec.color * ambient;
-        }
-        
         return color;
     }
 
@@ -111,7 +140,7 @@ void raycasting(void)
     glClearColor(0.0, 0.8, 0.8, 0.0);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    
+
 
     for (int i = 0; i < hJanela; i++)
     {
@@ -119,7 +148,7 @@ void raycasting(void)
         {
             auto pixel_center = pixel00_loc + (i * Dy) + (j * Dx);
             auto ray_direction = pixel_center - camera_center;
-            ray raio(camera_center,ray_direction);
+            ray raio(camera_center, ray_direction);
 
             vec3 cor = ray_color(raio);
             makePixel(i, j, cor.x(), cor.y(), cor.z());
@@ -127,7 +156,7 @@ void raycasting(void)
     }
     glDrawPixels(wJanela, hJanela, GL_RGB, GL_UNSIGNED_BYTE, PixelBuffer);
 
-    
+
 
     glFlush();
 }
@@ -159,17 +188,11 @@ void keyboard(unsigned char key, int mousex, int mousey)
 
 int main(int argc, char** argv)
 {
-    
-    double rEsfera = 2;
-    vec3 coord(0, 0, -(dJanela + rEsfera));
-    vec3 esfColor(255, 0, 0);
 
-    
-    //mundo.add(std::make_shared<sphere>(100,vec3(255,255,0),point3(0, -104.0, -1)));
-    mundo.add(std::make_shared<plane>(vec3(0, 255, 0), point3(0, 0, -20), vec3(0, 0, 1)));
-    //mundo.add(std::make_shared<plane>(vec3(0, 255, 0), point3(0, -2, 0),vec3(0, 1, 0)));
-    mundo.add(std::make_shared<sphere>(rEsfera, esfColor, coord));
-    std::cout << mundo.objects.size();
+    esfera.rEsfera = 2;
+    esfera.coord = vec3(0, 0, -(/*dJanela*/ 0.5 + esfera.rEsfera));
+    esfera.esfColor = vec3(255, 0, 0);
+
     // Negotiating window section
     glutInit(&argc, argv);
 
